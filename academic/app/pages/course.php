@@ -4,13 +4,12 @@ $id_student = (int)$_SESSION['id_student'];
 
 $module = $_GET['module'] ?? '';
 $pres = $_GET['presentation'] ?? '';
-
 if ($module === '' || $pres === '') {
-  header('Location: index.php?page=me');
+  header('Location: /academic/public/me');
   exit;
 }
 
-// оценки
+# 1) оценки
 $sqlAssess = "
 SELECT
   a.id_assessment,
@@ -31,7 +30,7 @@ $st = db()->prepare($sqlAssess);
 $st->execute([$id_student, $module, $pres]);
 $assessments = $st->fetchAll();
 
-// активность по типам
+# 2) активность по типам
 $sqlAct = "
 SELECT
   v.activity_type,
@@ -50,38 +49,104 @@ ORDER BY clicks DESC
 $st2 = db()->prepare($sqlAct);
 $st2->execute([$module, $pres, $id_student]);
 $activity = $st2->fetchAll();
+
+# 3) активность по дням (для графика)
+$sqlDays = "
+SELECT date, SUM(clicks) AS clicks
+FROM v_studentvle_agg
+WHERE code_module = ?
+  AND code_presentation = ?
+  AND id_student = ?
+GROUP BY date
+ORDER BY date
+";
+$st3 = db()->prepare($sqlDays);
+$st3->execute([$module, $pres, $id_student]);
+$days = $st3->fetchAll();
+
+$labels = array_map(fn($r) => (int)$r['date'], $days);
+$values = array_map(fn($r) => (int)$r['clicks'], $days);
+
+$title = "Курс $module / $pres";
+require __DIR__ . '/_layout_top.php';
 ?>
-<!doctype html>
-<html lang="ru">
-<head><meta charset="utf-8"><title>Курс</title></head>
-<body>
-  <p><a href="index.php?page=me">← назад</a></p>
-  <h1>Курс <?= htmlspecialchars($module) ?> / <?= htmlspecialchars($pres) ?></h1>
 
-  <h2>Оценивания</h2>
-  <table border="1" cellpadding="6">
-    <tr><th>id</th><th>type</th><th>date_day</th><th>weight</th><th>submitted</th><th>score</th></tr>
-    <?php foreach ($assessments as $a): ?>
-      <tr>
-        <td><?= (int)$a['id_assessment'] ?></td>
-        <td><?= htmlspecialchars($a['assessment_type']) ?></td>
-        <td><?= htmlspecialchars((string)$a['date_day']) ?></td>
-        <td><?= htmlspecialchars((string)$a['weight']) ?></td>
-        <td><?= htmlspecialchars((string)$a['date_submitted']) ?></td>
-        <td><?= htmlspecialchars((string)$a['score_num']) ?></td>
-      </tr>
-    <?php endforeach; ?>
-  </table>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0"><?= htmlspecialchars($module) ?> / <?= htmlspecialchars($pres) ?></h1>
+  <a class="btn btn-outline-secondary btn-sm" href="/academic/public/me">← Назад</a>
+</div>
 
-  <h2>Активность по типам (VLE)</h2>
-  <table border="1" cellpadding="6">
-    <tr><th>activity_type</th><th>clicks</th></tr>
-    <?php foreach ($activity as $r): ?>
-      <tr>
-        <td><?= htmlspecialchars($r['activity_type']) ?></td>
-        <td><?= htmlspecialchars((string)$r['clicks']) ?></td>
-      </tr>
-    <?php endforeach; ?>
-  </table>
-</body>
-</html>
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5">Активность по дням</h2>
+    <canvas id="clicksChart" height="90"></canvas>
+  </div>
+</div>
+
+<script>
+const labels = <?= json_encode($labels, JSON_UNESCAPED_UNICODE) ?>;
+const data = <?= json_encode($values, JSON_UNESCAPED_UNICODE) ?>;
+
+new Chart(document.getElementById('clicksChart'), {
+  type: 'line',
+  data: { labels, datasets: [{ label: 'Клики', data }] },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      x: { title: { display: true, text: 'День (от старта курса)' } },
+      y: { title: { display: true, text: 'Клики' } }
+    }
+  }
+});
+</script>
+
+<div class="row">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="h5">Оценивания</h2>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>id</th><th>type</th><th>day</th><th>weight</th><th>submitted</th><th>score</th></tr></thead>
+            <tbody>
+            <?php foreach ($assessments as $a): ?>
+              <tr>
+                <td><?= (int)$a['id_assessment'] ?></td>
+                <td><?= htmlspecialchars($a['assessment_type']) ?></td>
+                <td><?= htmlspecialchars((string)$a['date_day']) ?></td>
+                <td><?= htmlspecialchars((string)$a['weight']) ?></td>
+                <td><?= htmlspecialchars((string)$a['date_submitted']) ?></td>
+                <td><?= htmlspecialchars((string)$a['score_num']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="h5">Активность по типам</h2>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>type</th><th>clicks</th></tr></thead>
+            <tbody>
+            <?php foreach ($activity as $r): ?>
+              <tr>
+                <td><?= htmlspecialchars($r['activity_type']) ?></td>
+                <td><?= htmlspecialchars((string)$r['clicks']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<?php require __DIR__ . '/_layout_bottom.php'; ?>
