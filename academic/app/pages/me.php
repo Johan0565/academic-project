@@ -1,5 +1,5 @@
 <?php
-require_login();
+require_student();
 $id_student = (int)$_SESSION['id_student'];
 
 $sql = "

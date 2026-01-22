@@ -15,8 +15,21 @@ if ($pos !== false) {
 $routes = [
   '/' => 'login',
   '/login' => 'login',
+  '/register' => 'register',
+
   '/me' => 'me',
   '/me/course' => 'course',
+  '/me/export' => 'me_export',
+  
+  '/analytics' => 'analytics',
+
+  '/account' => 'account',
+
+  '/admin/requests' => 'admin_requests',
+  '/admin/users' => 'admin_users',
+
+  '/api/student-suggest' => 'api_student_suggest',
+
   '/logout' => 'logout',
 ];
 
